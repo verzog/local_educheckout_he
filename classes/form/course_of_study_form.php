@@ -86,7 +86,16 @@ class course_of_study_form extends \moodleform {
     public function validation($data, $files) {
         $errors = parent::validation($data, $files);
 
+        // Server-side required checks: the addRule('required') calls above are
+        // client-only, so a crafted POST could otherwise persist a blank record.
         $code = trim((string) ($data['code'] ?? ''));
+        if ($code === '') {
+            $errors['code'] = get_string('required');
+        }
+        if (trim((string) ($data['name'] ?? '')) === '') {
+            $errors['name'] = get_string('required');
+        }
+
         if ($code !== '' && course_of_study_manager::code_exists($code, (int) ($data['id'] ?? 0))) {
             $errors['code'] = get_string('cos_code_taken', 'local_educheckout_he');
         }

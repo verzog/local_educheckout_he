@@ -85,8 +85,10 @@ class unit_of_study_manager {
         $mode = in_array($data->deliverymode ?? '', self::modes(), true)
             ? $data->deliverymode
             : self::MODE_INTERNAL;
-        // A negative load is meaningless; clamp to zero.
-        $eftsl = max(0, (float) ($data->eftsl ?? 0));
+        // Clamp the load into the eftsl column's range — NUMBER(10,5), so
+        // 0 to 99999.99999 — so no caller can overflow the column. The form
+        // rejects out-of-range input with a message; this is the backstop.
+        $eftsl = min(99999.99999, max(0, (float) ($data->eftsl ?? 0)));
         // Blank stays null (unspecified); a given code is trimmed.
         $foecode = (isset($data->foecode) && trim((string) $data->foecode) !== '')
             ? trim((string) $data->foecode)

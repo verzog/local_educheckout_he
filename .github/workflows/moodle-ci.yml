@@ -160,10 +160,25 @@ jobs:
           docker logs moodle-db || true
           exit 1
 
+      # Fetch the platform core dependency. This pathway plugin extends
+      # local_educheckout_core (its pathway_provider extends core's
+      # base_provider and its version.php declares the dependency), so core must
+      # be present in the Moodle tree or the plugin fatals at admin-tree build.
+      # moodle-plugin-ci installs only the plugin under test, so core is pulled
+      # in here as an extra plugin. The repo is public, so no token is needed;
+      # main is used because HE's version.php pins core's current release.
+      - name: Fetch the core dependency
+        run: |
+          git clone --depth 1 https://github.com/verzog/local_educheckout_core.git \
+            "$HOME/extra-plugins/local_educheckout_core"
+
       # Install Moodle and the plugin against the single database started above.
       # DB selects the dbtype; DBPORT is 5432 for PostgreSQL and 3306 otherwise.
+      # --extra-plugins installs the cloned core alongside the plugin under test
+      # (core is installed to satisfy the dependency but is not itself linted or
+      # tested — only ./plugin is).
       - name: Install moodle-plugin-ci
-        run: moodle-plugin-ci install --plugin ./plugin --db-host=127.0.0.1 --db-port=$DBPORT
+        run: moodle-plugin-ci install --plugin ./plugin --extra-plugins "$HOME/extra-plugins" --db-host=127.0.0.1 --db-port=$DBPORT
         env:
           DB: ${{ matrix.database }}
           MOODLE_BRANCH: ${{ matrix.moodle-branch }}

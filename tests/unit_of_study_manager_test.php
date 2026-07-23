@@ -99,6 +99,25 @@ final class unit_of_study_manager_test extends \advanced_testcase {
     }
 
     /**
+     * An over-range EFTSL is clamped to the column's maximum on save, so no
+     * caller can overflow the NUMBER(10,5) column.
+     *
+     * @return void
+     */
+    public function test_save_clamps_eftsl_upper_bound(): void {
+        $id = unit_of_study_manager::save((object) [
+            'courseofstudyid' => $this->courseid,
+            'code'            => 'SCI103',
+            'name'            => 'Overload',
+            'eftsl'           => '100000',
+            'deliverymode'    => 'internal',
+        ]);
+
+        $unit = unit_of_study_manager::get($id);
+        $this->assertEqualsWithDelta(99999.99999, (float) $unit->eftsl, 0.0000001);
+    }
+
+    /**
      * get_all() scopes to a course of study and to active units.
      *
      * @return void
