@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ruleset name="local_educheckout_he">
+    <description>
+        EduCheckout Platform coding standard: the Moodle standard, adjusted for a
+        proprietary (non-GPL) in-house plugin. See core CLAUDE.md sections 2.1 and 9.
+    </description>
+
+    <rule ref="moodle">
+        <!-- Proprietary, in-house plugin: not GPL, so the Moodle GPL
+             boilerplate sniff does not apply. The file headers carry a
+             proprietary "all rights reserved" notice instead. -->
+        <exclude name="moodle.Files.BoilerplateComment"/>
+    </rule>
+
+    <!-- This plugin is proprietary, not GPLv3+. An empty licence regex disables
+         the @license value-format check so the proprietary licence tag does not
+         raise a warning (warnings fail the build under the zero-warnings CI run).
+         The @license tag itself is still required to be present. -->
+    <config name="moodleLicenseRegex" value=""/>
+</ruleset>

@@ -1,0 +1,249 @@
+# EduCheckout Platform — Moodle Plugin CI
+# Runs on pull requests, and on pushes to main (post-merge verification).
+# Pushing a branch that already has an open PR therefore triggers a single
+# run (the pull_request event), not two.
+#
+# PHP 8.2 / 8.3 / 8.4 × pgsql / mariadb / mysqli × Moodle 5.0 / 5.1 / 5.2 stable.
+#
+# Databases: each matrix leg starts ONLY the one engine it tests, via a
+# `docker run` step rather than always-on service containers. A single job
+# cannot vary `services:` by matrix value, and three always-on services meant
+# every leg pulled postgres + mariadb + mysql (~72 image pulls per run) — which
+# made the run prone to transient Docker Hub pull timeouts. Starting just the
+# needed engine cuts each leg to a single DB image pull. Moodle treats MariaDB
+# and MySQL as distinct dbtypes ('mariadb' vs 'mysqli') and rejects the wrong
+# one at install; both listen on 3306 here since only one starts per leg.
+#
+# Moodle branches: Moodle 5.0 and 5.1 both run PHP 8.2/8.3/8.4 — the floor rose
+# to 8.2 in 5.0 and stays there for 5.1. Moodle 5.2 raised the floor to 8.3, so
+# it runs 8.3/8.4. Moodle 5.1 and 5.2 use the public/ docroot layout. All three
+# branches are exercised across every DB engine.
+#
+# Timezone: Australia/Sydney (AU locale, DD/MM/YYYY Behat scenarios).
+
+name: Moodle Plugin CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Cancel an in-progress run when a newer commit lands on the same ref, so
+# superseded runs stop burning runners (e.g. a quick fixup push, or a re-trigger
+# of a flaked run). Cancelled jobs are marked failed at the end of the job for
+# branch-protection correctness, so superseded runs show red rather than grey.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+
+    # -----------------------------------------------------------------------
+    # Build matrix
+    # Full cross-product of PHP × Moodle-branch × DB, with the one unsupported
+    # PHP/branch pair excluded. The PHP floor rose to 8.2 in Moodle 5.0 (dropping
+    # 8.1) and stays at 8.2 for 5.1; only Moodle 5.2 raises it to 8.3. So the
+    # single invalid combination is 5.2 on PHP 8.2. The resulting grid:
+    #   5.0 → PHP 8.2 / 8.3 / 8.4  × 3 DB = 9 builds
+    #   5.1 → PHP 8.2 / 8.3 / 8.4  × 3 DB = 9 builds
+    #   5.2 → PHP       8.3 / 8.4  × 3 DB = 6 builds
+    # = 24 parallel builds. 5.1/5.2 use the public/ docroot layout. Each branch
+    # is exercised from its supported PHP floor up to 8.4 across all three DBs.
+    # fail-fast: false ensures one failure does not cancel the other builds.
+    # -----------------------------------------------------------------------
+    strategy:
+      fail-fast: false
+      matrix:
+        php: ['8.2', '8.3', '8.4']
+        moodle-branch: ['MOODLE_500_STABLE', 'MOODLE_501_STABLE', 'MOODLE_502_STABLE']
+        database: [pgsql, mariadb, mysqli]
+        exclude:
+          # Moodle 5.2 raised its PHP floor to 8.3, so drop its PHP 8.2 leg.
+          # Moodle 5.0 and 5.1 still support 8.2 per their server requirements.
+          - { php: '8.2', moodle-branch: 'MOODLE_502_STABLE' }
+
+    # -----------------------------------------------------------------------
+    # Environment
+    # TZ must be set here (not just in steps) so PHP date functions,
+    # Behat scenarios, and userdate() calls all resolve to Australia/Sydney.
+    # -----------------------------------------------------------------------
+    env:
+      TZ: Australia/Sydney
+
+    steps:
+
+      # Check out this plugin into ./plugin so moodle-plugin-ci can find it.
+      - name: Check out repository code
+        uses: actions/checkout@v4
+        with:
+          path: plugin
+
+      # Install the PHP version with required extensions. Code coverage (pcov)
+      # is enabled on a single representative leg only (PHP 8.3 + pgsql on Moodle
+      # 5.0) so the rest of the matrix stays fast. Pinning the branch matters now
+      # that 8.3 + pgsql also appears on the 5.1 and 5.2 legs.
+      - name: Setup PHP ${{ matrix.php }}
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          ini-values: max_input_vars=5000
+          coverage: ${{ (matrix.php == '8.3' && matrix.database == 'pgsql' && matrix.moodle-branch == 'MOODLE_500_STABLE') && 'pcov' || 'none' }}
+
+      # Start only the database this leg tests, mirroring the env, charset, and
+      # ports the equivalent service container used. Published on 127.0.0.1 so
+      # moodle-plugin-ci (running on the host runner) reaches it the same way it
+      # reached the old service container. pgsql -> 5432; mariadb/mysqli -> 3306
+      # (only one of them runs per leg, so there is no port clash).
+      - name: Start ${{ matrix.database }} database
+        run: |
+          case "${{ matrix.database }}" in
+            pgsql)
+              docker run -d --name moodle-db \
+                -e POSTGRES_USER=postgres \
+                -e POSTGRES_HOST_AUTH_METHOD=trust \
+                -p 5432:5432 \
+                postgres:16
+              ;;
+            mariadb)
+              docker run -d --name moodle-db \
+                -e MYSQL_USER=root \
+                -e MYSQL_ALLOW_EMPTY_PASSWORD=true \
+                -e MYSQL_CHARACTER_SET_SERVER=utf8mb4 \
+                -e MYSQL_COLLATION_SERVER=utf8mb4_unicode_ci \
+                -p 3306:3306 \
+                mariadb:10.11
+              ;;
+            mysqli)
+              docker run -d --name moodle-db \
+                -e MYSQL_ALLOW_EMPTY_PASSWORD=true \
+                -e MYSQL_ROOT_HOST=% \
+                -e MYSQL_CHARACTER_SET_SERVER=utf8mb4 \
+                -e MYSQL_COLLATION_SERVER=utf8mb4_unicode_ci \
+                -p 3306:3306 \
+                mysql:8.4
+              ;;
+          esac
+
+      # Install moodle-plugin-ci v4, add its binaries to PATH,
+      # and generate the en_AU locale for AU date/currency tests.
+      - name: Initialise moodle-plugin-ci
+        run: |
+          composer create-project -n --no-dev --prefer-dist moodlehq/moodle-plugin-ci ci ^4
+          echo $(cd ci/bin; pwd) >> $GITHUB_PATH
+          echo $(cd ci/vendor/bin; pwd) >> $GITHUB_PATH
+          sudo locale-gen en_AU.UTF-8
+          echo "NVM_DIR=$HOME/.nvm" >> $GITHUB_ENV
+
+      # Block until the database accepts connections before installing Moodle.
+      # The container has had the composer step above to warm up; this confirms
+      # readiness (pg_isready for PostgreSQL, mysqladmin/mariadb-admin ping for
+      # the MySQL-protocol engines) and fails fast with logs if it never comes up.
+      - name: Wait for the database to be ready
+        run: |
+          for attempt in $(seq 1 45); do
+            if [ "${{ matrix.database }}" = "pgsql" ]; then
+              if docker exec moodle-db pg_isready -U postgres >/dev/null 2>&1; then
+                echo "PostgreSQL is ready."
+                exit 0
+              fi
+            else
+              if docker exec moodle-db mysqladmin ping --silent >/dev/null 2>&1 \
+                 || docker exec moodle-db mariadb-admin ping --silent >/dev/null 2>&1; then
+                echo "MySQL-protocol database is ready."
+                exit 0
+              fi
+            fi
+            sleep 2
+          done
+          echo "Database did not become ready in time." >&2
+          docker logs moodle-db || true
+          exit 1
+
+      # Install Moodle and the plugin against the single database started above.
+      # DB selects the dbtype; DBPORT is 5432 for PostgreSQL and 3306 otherwise.
+      - name: Install moodle-plugin-ci
+        run: moodle-plugin-ci install --plugin ./plugin --db-host=127.0.0.1 --db-port=$DBPORT
+        env:
+          DB: ${{ matrix.database }}
+          MOODLE_BRANCH: ${{ matrix.moodle-branch }}
+          DBPORT: ${{ matrix.database == 'pgsql' && '5432' || '3306' }}
+
+      # -----------------------------------------------------------------------
+      # Test steps — all use if: ${{ !cancelled() }} so a failure in one step
+      # does not stop the rest of the matrix from reporting.
+      # -----------------------------------------------------------------------
+
+      - name: PHP Lint
+        if: ${{ !cancelled() }}
+        run: moodle-plugin-ci phplint
+
+      # PHP Mess Detector is advisory — continue-on-error keeps the build
+      # green while you address PHPMD warnings progressively.
+      - name: PHP Mess Detector
+        if: ${{ !cancelled() }}
+        continue-on-error: true
+        run: moodle-plugin-ci phpmd
+
+      # Enforces Moodle coding standards (4-space indent, brace style, etc.).
+      # --max-warnings 0 = zero tolerance. The committed .phpcs.xml ruleset is
+      # passed via --standard so the proprietary (non-GPL) header is accepted:
+      # it inherits the moodle standard but excludes moodle.Files.BoilerplateComment.
+      - name: Moodle Code Checker
+        if: ${{ !cancelled() }}
+        run: moodle-plugin-ci phpcs --max-warnings 0 --standard=.phpcs.xml
+
+      # Validates @package, @copyright, @license tags in every file.
+      - name: Moodle PHPDoc Checker
+        if: ${{ !cancelled() }}
+        run: moodle-plugin-ci phpdoc --max-warnings 0
+
+      # Checks version.php structure and Frankenstyle component names.
+      - name: Validating
+        if: ${{ !cancelled() }}
+        run: moodle-plugin-ci validate
+
+      # Ensures db/upgrade.php savepoints are correctly incremented.
+      - name: Check upgrade savepoints
+        if: ${{ !cancelled() }}
+        run: moodle-plugin-ci savepoints
+
+      # Validates Mustache templates — no hardcoded strings, {{#str}} tags.
+      - name: Mustache Lint
+        if: ${{ !cancelled() }}
+        run: moodle-plugin-ci mustache
+
+      # Lints SCSS and compiles AMD JS modules in amd/src/.
+      - name: Grunt
+        if: ${{ !cancelled() }}
+        run: moodle-plugin-ci grunt --max-lint-warnings 0
+
+      # PHPUnit back-end tests. The coverage leg (PHP 8.3 + pgsql on Moodle 5.0)
+      # also prints a text coverage summary, scoped by tests/coverage.php.
+      - name: PHPUnit tests
+        if: ${{ !cancelled() }}
+        run: moodle-plugin-ci phpunit --fail-on-warning ${{ (matrix.php == '8.3' && matrix.database == 'pgsql' && matrix.moodle-branch == 'MOODLE_500_STABLE') && '--coverage-text' || '' }}
+
+      # Behat acceptance tests. All date values in .feature files must use
+      # DD/MM/YYYY to match the AU locale. --auto-rerun 3 absorbs flakiness.
+      - name: Behat features
+        id: behat
+        if: ${{ !cancelled() }}
+        run: moodle-plugin-ci behat --profile chrome --auto-rerun 3
+
+      # Upload Behat screenshots on failure so you can inspect what went wrong.
+      - name: Upload Behat Faildump
+        if: ${{ failure() && steps.behat.outcome == 'failure' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: Behat Faildump (${{ join(matrix.*, ', ') }})
+          path: ${{ github.workspace }}/moodledata/behat_dump
+          retention-days: 7
+          if-no-files-found: ignore
+
+      # Explicitly fail cancelled jobs so GitHub marks them red, not grey
+      # (including runs superseded by the concurrency rule above).
+      - name: Mark cancelled jobs as failed
+        if: ${{ cancelled() }}
+        run: exit 1
