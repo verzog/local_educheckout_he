@@ -108,7 +108,6 @@ jobs:
               ;;
             mariadb)
               docker run -d --name moodle-db \
-                -e MYSQL_USER=root \
                 -e MYSQL_ALLOW_EMPTY_PASSWORD=true \
                 -e MYSQL_CHARACTER_SET_SERVER=utf8mb4 \
                 -e MYSQL_COLLATION_SERVER=utf8mb4_unicode_ci \
