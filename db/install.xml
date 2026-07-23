@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<XMLDB PATH="local/educheckout_he/db" VERSION="20260723" COMMENT="EduCheckout Platform higher education pathway schema.
+    Tables are prefixed mdl_local_educheckout_he_* per project naming conventions.
+    The higher education structural catalogue: courses of study and their units of study.
+    Run db/upgrade.php savepoints whenever this file changes."
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:noNamespaceSchemaLocation="../../../lib/xmldb/xmldb.xsd"
+>
+  <TABLES>
+
+    <!--
+    =========================================================================
+    local_educheckout_he_coursesofstudy
+    =========================================================================
+    An award course a student is admitted to (a TCSI "course of study"): the
+    parent structure that units of study hang off. Institutional configuration,
+    not learner data — only the authoring reference (usermodified) is per-user.
+    -->
+    <TABLE NAME="local_educheckout_he_coursesofstudy" COMMENT="Higher education award courses (TCSI courses of study).">
+      <FIELDS>
+        <FIELD NAME="id"           TYPE="int"  LENGTH="10"  NOTNULL="true" SEQUENCE="true"/>
+        <FIELD NAME="code"         TYPE="char" LENGTH="64"  NOTNULL="true"
+                                   COMMENT="Course of study code (unique institutional identifier)."/>
+        <FIELD NAME="name"         TYPE="char" LENGTH="255" NOTNULL="true"
+                                   COMMENT="Display name of the award course."/>
+        <FIELD NAME="cricoscode"   TYPE="char" LENGTH="20"  NOTNULL="false"
+                                   COMMENT="CRICOS registration code for an international course. NULL = not CRICOS-registered."/>
+        <FIELD NAME="courselevel"  TYPE="char" LENGTH="32"  NOTNULL="true"
+                                   COMMENT="Level of course: undergraduate, postgraduate, higherdegree, enabling, or other."/>
+        <FIELD NAME="enabled"      TYPE="int"  LENGTH="2"   NOTNULL="true" DEFAULT="1"
+                                   COMMENT="1 = active, 0 = retired. A per-record kill-switch."/>
+        <FIELD NAME="timecreated"  TYPE="int"  LENGTH="10"  NOTNULL="true" DEFAULT="0"/>
+        <FIELD NAME="timemodified" TYPE="int"  LENGTH="10"  NOTNULL="true" DEFAULT="0"/>
+        <FIELD NAME="usermodified" TYPE="int"  LENGTH="10"  NOTNULL="true" DEFAULT="0"
+                                   COMMENT="FK → mdl_user.id who created or last changed the course of study."/>
+      </FIELDS>
+      <KEYS>
+        <KEY NAME="primary"         TYPE="primary" FIELDS="id"/>
+        <KEY NAME="fk_usermodified" TYPE="foreign" FIELDS="usermodified" REFTABLE="user" REFFIELDS="id"/>
+      </KEYS>
+      <INDEXES>
+        <!-- The course of study code is the institutional identifier and must be unique. -->
+        <INDEX NAME="uniq_code" UNIQUE="true" FIELDS="code"/>
+      </INDEXES>
+    </TABLE>
+
+    <!--
+    =========================================================================
+    local_educheckout_he_unitsofstudy
+    =========================================================================
+    A reportable teaching unit within a course of study (a TCSI "unit of
+    study"), carrying the EFTSL load and field-of-education classification TCSI
+    reports on. Institutional configuration; only usermodified is per-user.
+    -->
+    <TABLE NAME="local_educheckout_he_unitsofstudy" COMMENT="Higher education reportable teaching units (TCSI units of study).">
+      <FIELDS>
+        <FIELD NAME="id"              TYPE="int"    LENGTH="10"  NOTNULL="true" SEQUENCE="true"/>
+        <FIELD NAME="courseofstudyid" TYPE="int"    LENGTH="10"  NOTNULL="true"
+                                      COMMENT="FK → local_educheckout_he_coursesofstudy.id (the parent award course)."/>
+        <FIELD NAME="code"            TYPE="char"   LENGTH="64"  NOTNULL="true"
+                                      COMMENT="Unit of study code (unique within its course of study)."/>
+        <FIELD NAME="name"            TYPE="char"   LENGTH="255" NOTNULL="true"
+                                      COMMENT="Display name of the unit of study."/>
+        <FIELD NAME="eftsl"           TYPE="number" LENGTH="10"  NOTNULL="true" DEFAULT="0" DECIMALS="5"
+                                      COMMENT="Equivalent Full-Time Student Load for the unit (e.g. 0.125)."/>
+        <FIELD NAME="foecode"         TYPE="char"   LENGTH="12"  NOTNULL="false"
+                                      COMMENT="Field of education code (ASCED). NULL = unspecified."/>
+        <FIELD NAME="deliverymode"    TYPE="char"   LENGTH="32"  NOTNULL="true"
+                                      COMMENT="Delivery mode: internal, external, or multimodal."/>
+        <FIELD NAME="enabled"         TYPE="int"    LENGTH="2"   NOTNULL="true" DEFAULT="1"
+                                      COMMENT="1 = active, 0 = retired. A per-record kill-switch."/>
+        <FIELD NAME="timecreated"     TYPE="int"    LENGTH="10"  NOTNULL="true" DEFAULT="0"/>
+        <FIELD NAME="timemodified"    TYPE="int"    LENGTH="10"  NOTNULL="true" DEFAULT="0"/>
+        <FIELD NAME="usermodified"    TYPE="int"    LENGTH="10"  NOTNULL="true" DEFAULT="0"
+                                      COMMENT="FK → mdl_user.id who created or last changed the unit of study."/>
+      </FIELDS>
+      <KEYS>
+        <KEY NAME="primary"           TYPE="primary" FIELDS="id"/>
+        <KEY NAME="fk_courseofstudy"  TYPE="foreign" FIELDS="courseofstudyid" REFTABLE="local_educheckout_he_coursesofstudy" REFFIELDS="id"/>
+        <KEY NAME="fk_usermodified"   TYPE="foreign" FIELDS="usermodified" REFTABLE="user" REFFIELDS="id"/>
+      </KEYS>
+      <INDEXES>
+        <!-- A unit code is unique within its parent course of study. -->
+        <INDEX NAME="uniq_courseofstudy_code" UNIQUE="true" FIELDS="courseofstudyid, code"/>
+      </INDEXES>
+    </TABLE>
+
+  </TABLES>
+</XMLDB>

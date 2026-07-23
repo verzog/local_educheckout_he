@@ -21,7 +21,7 @@
 defined('MOODLE_INTERNAL') || die();
 
 $plugin->component    = 'local_educheckout_he';
-$plugin->version      = 2026072300;   // YYYYMMDDNN — increment NN for same-day releases.
+$plugin->version      = 2026072301;   // YYYYMMDDNN — increment NN for same-day releases.
 $plugin->requires     = 2025041400;   // Moodle 5.0 minimum (released 14 April 2025).
 $plugin->maturity     = MATURITY_ALPHA;
 $plugin->release      = '0.1.0';

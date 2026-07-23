@@ -44,6 +44,19 @@ class pathway_provider extends \local_educheckout_core\base_provider
     const PATHWAY = 'he';
 
     /**
+     * Whether the higher education pathway is enabled.
+     *
+     * The master kill-switch (CLAUDE.md §8): with it off the pathway stays
+     * inert — its operational pages are unavailable and it claims no new
+     * enrolments. Unset counts as off.
+     *
+     * @return bool True when the pathway is enabled.
+     */
+    public static function is_enabled(): bool {
+        return (string) get_config('local_educheckout_he', 'he_enabled') === '1';
+    }
+
+    /**
      * Returns the machine-readable pathway identifier.
      *
      * @return string Lowercase alphanumeric identifier, no spaces.
@@ -101,19 +114,20 @@ class pathway_provider extends \local_educheckout_core\base_provider
     /**
      * Returns true if this pathway claims ownership of a given enrolment.
      *
-     * The contract is: an enrolment is HE-owned when its course carries a unit
-     * of study record in the HE pathway tables. That data model does not exist
-     * yet (foundation scope), so nothing is claimed and the method returns
-     * false — the deliberate no-op that keeps a fresh HE install from altering
-     * core's enrolment tagging. The real single-indexed lookup arrives with the
-     * unit-of-study lane (docs/ROADMAP.md).
+     * The contract is: an enrolment is HE-owned when its course maps to a unit
+     * of study. The unit-of-study catalogue now exists, but the mapping from a
+     * unit to the Moodle course(s) that deliver it is not built yet, so there
+     * is nothing to match a course against and the method still returns false —
+     * the deliberate no-op that keeps HE from altering core's enrolment tagging.
+     * The real single-indexed lookup arrives with the unit-course mapping lane
+     * (docs/ROADMAP.md).
      *
      * @param  int  $userid   Moodle user ID being enrolled.
      * @param  int  $courseid Moodle course ID being enrolled in.
      * @return bool           True if this pathway claims ownership.
      */
     public static function owns_enrolment(int $userid, int $courseid): bool {
-        unset($userid, $courseid); // No unit-of-study model yet; nothing to claim.
+        unset($userid, $courseid); // No unit-course mapping yet; nothing to claim.
 
         return false;
     }
@@ -122,10 +136,10 @@ class pathway_provider extends \local_educheckout_core\base_provider
      * Registers this pathway's admin sub-category and pages under the
      * 'educheckout_core' parent category.
      *
-     * Called from this plugin's own settings.php during page load. Foundation
-     * scope registers the pathway category and a single settings page carrying
-     * the kill-switch; the operational pages (unit-of-study CRUD, TCSI/HEIMS
-     * exports) are added here as later lanes land.
+     * Called from this plugin's own settings.php during page load. Registers
+     * the pathway category, a settings page carrying the kill-switch, and the
+     * structural-catalogue pages (courses of study, units of study). Later
+     * lanes (unit-course mapping, TCSI/HEIMS exports) add their pages here.
      *
      * @param \admin_root $admin The Moodle admin root object ($ADMIN).
      * @return void
@@ -137,25 +151,46 @@ class pathway_provider extends \local_educheckout_core\base_provider
             new \lang_string('admincat_he', 'local_educheckout_he')
         ));
 
-        // Settings page, gated by the pathway's manage capability.
-        $settings = new \admin_settingpage(
-            'local_educheckout_he_settings',
-            new \lang_string('settings_he', 'local_educheckout_he'),
+        // Courses of study — the award courses (TCSI courses of study).
+        $admin->add('educheckout_he', new \admin_externalpage(
+            'local_educheckout_he_coursesofstudy',
+            new \lang_string('coursesofstudy', 'local_educheckout_he'),
+            new \moodle_url('/local/educheckout_he/coursesofstudy.php'),
             'local/educheckout_he:manage'
-        );
+        ));
 
-        // Kill-switch for the whole pathway (CLAUDE.md §8). Off by default:
-        // until it is ticked the pathway stays inert regardless of licence.
-        $settings->add(
-            new \admin_setting_configcheckbox(
-                'local_educheckout_he/he_enabled',
-                new \lang_string('setting_he_enabled', 'local_educheckout_he'),
-                new \lang_string('setting_he_enabled_desc', 'local_educheckout_he'),
-                0
-            )
-        );
+        // Units of study — the reportable teaching units (TCSI units of study).
+        $admin->add('educheckout_he', new \admin_externalpage(
+            'local_educheckout_he_unitsofstudy',
+            new \lang_string('unitsofstudy', 'local_educheckout_he'),
+            new \moodle_url('/local/educheckout_he/unitsofstudy.php'),
+            'local/educheckout_he:manage'
+        ));
 
-        $admin->add('educheckout_he', $settings);
+        // The settings page stays behind the site-config check (the operational
+        // pages above are already capability-gated and register for everyone).
+        // This mirrors $hassiteconfig, which settings.php cannot pass in through
+        // the fixed base_provider signature.
+        if (has_capability('moodle/site:config', \context_system::instance())) {
+            $settings = new \admin_settingpage(
+                'local_educheckout_he_settings',
+                new \lang_string('settings_he', 'local_educheckout_he'),
+                'local/educheckout_he:manage'
+            );
+
+            // Kill-switch for the whole pathway (CLAUDE.md §8). Off by default:
+            // until it is ticked the pathway stays inert regardless of licence.
+            $settings->add(
+                new \admin_setting_configcheckbox(
+                    'local_educheckout_he/he_enabled',
+                    new \lang_string('setting_he_enabled', 'local_educheckout_he'),
+                    new \lang_string('setting_he_enabled_desc', 'local_educheckout_he'),
+                    0
+                )
+            );
+
+            $admin->add('educheckout_he', $settings);
+        }
     }
 
     /**
