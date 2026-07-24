@@ -50,7 +50,6 @@ class provider implements
     \core_privacy\local\request\core_userlist_provider,
     \core_privacy\local\request\plugin\provider
 {
-
     /** The courses of study table. */
     const TABLE_COURSES = 'local_educheckout_he_coursesofstudy';
 

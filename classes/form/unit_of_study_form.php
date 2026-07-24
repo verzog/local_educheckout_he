@@ -131,9 +131,11 @@ class unit_of_study_form extends \moodleform {
             }
         }
 
-        if ($code !== '' && $courseofstudyid
-                && unit_of_study_manager::code_exists($courseofstudyid, $code, (int) ($data['id'] ?? 0))) {
-            $errors['code'] = get_string('uos_code_taken', 'local_educheckout_he');
+        if ($code !== '' && $courseofstudyid && !isset($errors['code'])) {
+            $editid = (int) ($data['id'] ?? 0);
+            if (unit_of_study_manager::code_exists($courseofstudyid, $code, $editid)) {
+                $errors['code'] = get_string('uos_code_taken', 'local_educheckout_he');
+            }
         }
 
         return $errors;
