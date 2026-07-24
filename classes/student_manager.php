@@ -145,7 +145,22 @@ class student_manager {
         $record->userid = $userid;
         $record->timecreated = $now;
 
-        return (int) $DB->insert_record(self::TABLE, $record);
+        try {
+            return (int) $DB->insert_record(self::TABLE, $record);
+        } catch (\dml_exception $e) {
+            // A concurrent first-save for the same learner may have inserted the
+            // row between the check above and here, tripping the unique userid
+            // key. Update the winning row so the save still completes as an
+            // upsert rather than surfacing a constraint error.
+            $winner = self::get($userid);
+            if ($winner) {
+                unset($record->userid, $record->timecreated);
+                $record->id = $winner->id;
+                $DB->update_record(self::TABLE, $record);
+                return (int) $winner->id;
+            }
+            throw $e;
+        }
     }
 
     /**
