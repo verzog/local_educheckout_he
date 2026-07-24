@@ -85,5 +85,41 @@
       </INDEXES>
     </TABLE>
 
+    <!--
+    =========================================================================
+    local_educheckout_he_unitcourses
+    =========================================================================
+    Maps a unit of study to the Moodle course(s) that deliver it. This mapping
+    is what makes the pathway claim an enrolment: owns_enrolment() returns true
+    when the enrolled course maps to an enabled unit of study. The courseid
+    index keeps that per-enrolment lookup a single indexed read. Mapping is
+    institutional configuration; only usermodified is per-user.
+    -->
+    <TABLE NAME="local_educheckout_he_unitcourses" COMMENT="Maps a unit of study to the Moodle course(s) that deliver it.">
+      <FIELDS>
+        <FIELD NAME="id"            TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="true"/>
+        <FIELD NAME="unitofstudyid" TYPE="int" LENGTH="10" NOTNULL="true"
+                                    COMMENT="FK → local_educheckout_he_unitsofstudy.id."/>
+        <FIELD NAME="courseid"      TYPE="int" LENGTH="10" NOTNULL="true"
+                                    COMMENT="FK → mdl_course.id (the Moodle course that delivers the unit)."/>
+        <FIELD NAME="timecreated"   TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0"/>
+        <FIELD NAME="timemodified"  TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0"/>
+        <FIELD NAME="usermodified"  TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0"
+                                    COMMENT="FK → mdl_user.id who created or last changed the mapping."/>
+      </FIELDS>
+      <KEYS>
+        <KEY NAME="primary"          TYPE="primary" FIELDS="id"/>
+        <KEY NAME="fk_unitofstudy"   TYPE="foreign" FIELDS="unitofstudyid" REFTABLE="local_educheckout_he_unitsofstudy" REFFIELDS="id"/>
+        <KEY NAME="fk_courseid"      TYPE="foreign" FIELDS="courseid" REFTABLE="course" REFFIELDS="id"/>
+        <KEY NAME="fk_usermodified"  TYPE="foreign" FIELDS="usermodified" REFTABLE="user" REFFIELDS="id"/>
+      </KEYS>
+      <INDEXES>
+        <!-- One mapping per unit/course pair. -->
+        <INDEX NAME="uniq_unit_course" UNIQUE="true" FIELDS="unitofstudyid, courseid"/>
+        <!-- owns_enrolment() looks up by Moodle course id on every new enrolment. -->
+        <INDEX NAME="idx_courseid" UNIQUE="false" FIELDS="courseid"/>
+      </INDEXES>
+    </TABLE>
+
   </TABLES>
 </XMLDB>

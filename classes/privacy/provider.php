@@ -56,6 +56,9 @@ class provider implements
     /** The units of study table. */
     const TABLE_UNITS = 'local_educheckout_he_unitsofstudy';
 
+    /** The unit-course mapping table. */
+    const TABLE_UNITCOURSES = 'local_educheckout_he_unitcourses';
+
     /**
      * Returns metadata describing the personal data stored by this plugin.
      *
@@ -85,6 +88,17 @@ class provider implements
             'privacy:metadata:unitsofstudy'
         );
 
+        // A unit-course mapping is institutional configuration; only the
+        // authoring reference (usermodified) is personal data.
+        $collection->add_database_table(
+            self::TABLE_UNITCOURSES,
+            [
+                'usermodified' => 'privacy:metadata:unitcourses:usermodified',
+                'timemodified' => 'privacy:metadata:unitcourses:timemodified',
+            ],
+            'privacy:metadata:unitcourses'
+        );
+
         return $collection;
     }
 
@@ -104,12 +118,14 @@ class provider implements
                   FROM {context} ctx
                  WHERE ctx.contextlevel = :contextlevel
                    AND (EXISTS (SELECT 1 FROM {" . self::TABLE_COURSES . "} cos WHERE cos.usermodified = :userid1)
-                     OR EXISTS (SELECT 1 FROM {" . self::TABLE_UNITS . "} uos WHERE uos.usermodified = :userid2))";
+                     OR EXISTS (SELECT 1 FROM {" . self::TABLE_UNITS . "} uos WHERE uos.usermodified = :userid2)
+                     OR EXISTS (SELECT 1 FROM {" . self::TABLE_UNITCOURSES . "} ucm WHERE ucm.usermodified = :userid3))";
 
         $contextlist->add_from_sql($sql, [
             'contextlevel' => CONTEXT_SYSTEM,
             'userid1'      => $userid,
             'userid2'      => $userid,
+            'userid3'      => $userid,
         ]);
 
         return $contextlist;
@@ -135,6 +151,10 @@ class provider implements
 
         // Admins who authored a unit of study appear via usermodified too.
         $sql = "SELECT usermodified FROM {" . self::TABLE_UNITS . "} WHERE usermodified <> 0";
+        $userlist->add_from_sql('usermodified', $sql, []);
+
+        // Admins who authored a unit-course mapping appear via usermodified too.
+        $sql = "SELECT usermodified FROM {" . self::TABLE_UNITCOURSES . "} WHERE usermodified <> 0";
         $userlist->add_from_sql('usermodified', $sql, []);
     }
 
@@ -172,6 +192,15 @@ class provider implements
                     (object) ['records' => array_values($units)]
                 );
             }
+
+            // Export unit-course mappings this user authored.
+            $mappings = $DB->get_records(self::TABLE_UNITCOURSES, ['usermodified' => $userid]);
+            if ($mappings) {
+                writer::with_context($context)->export_data(
+                    [get_string('pluginname', 'local_educheckout_he'), 'Unit-course mappings'],
+                    (object) ['records' => array_values($mappings)]
+                );
+            }
         }
     }
 
@@ -193,6 +222,7 @@ class provider implements
 
         $DB->set_field_select(self::TABLE_COURSES, 'usermodified', 0, 'usermodified <> ?', [0]);
         $DB->set_field_select(self::TABLE_UNITS, 'usermodified', 0, 'usermodified <> ?', [0]);
+        $DB->set_field_select(self::TABLE_UNITCOURSES, 'usermodified', 0, 'usermodified <> ?', [0]);
     }
 
     /**
@@ -214,6 +244,7 @@ class provider implements
             // Anonymise this admin's authorship of any catalogue record.
             $DB->set_field(self::TABLE_COURSES, 'usermodified', 0, ['usermodified' => $userid]);
             $DB->set_field(self::TABLE_UNITS, 'usermodified', 0, ['usermodified' => $userid]);
+            $DB->set_field(self::TABLE_UNITCOURSES, 'usermodified', 0, ['usermodified' => $userid]);
         }
     }
 
@@ -241,5 +272,6 @@ class provider implements
 
         $DB->set_field_select(self::TABLE_COURSES, 'usermodified', 0, "usermodified $insql", $inparams);
         $DB->set_field_select(self::TABLE_UNITS, 'usermodified', 0, "usermodified $insql", $inparams);
+        $DB->set_field_select(self::TABLE_UNITCOURSES, 'usermodified', 0, "usermodified $insql", $inparams);
     }
 }

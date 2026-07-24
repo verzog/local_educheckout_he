@@ -114,22 +114,25 @@ class pathway_provider extends \local_educheckout_core\base_provider
     /**
      * Returns true if this pathway claims ownership of a given enrolment.
      *
-     * The contract is: an enrolment is HE-owned when its course maps to a unit
-     * of study. The unit-of-study catalogue now exists, but the mapping from a
-     * unit to the Moodle course(s) that deliver it is not built yet, so there
-     * is nothing to match a course against and the method still returns false —
-     * the deliberate no-op that keeps HE from altering core's enrolment tagging.
-     * The real single-indexed lookup arrives with the unit-course mapping lane
-     * (docs/ROADMAP.md).
+     * An enrolment is HE-owned when its course maps to a unit of study (and
+     * whose parent course of study is enabled) — the unit_course_manager mapping.
+     * Ownership is determined by the course, not the user, so userid is unused.
+     * The kill-switch gates it: while the pathway is off it claims nothing, so
+     * toggling it off stops new HE tagging without touching existing rows. The
+     * lookup itself is a single indexed read (unit_course_manager).
      *
      * @param  int  $userid   Moodle user ID being enrolled.
      * @param  int  $courseid Moodle course ID being enrolled in.
      * @return bool           True if this pathway claims ownership.
      */
     public static function owns_enrolment(int $userid, int $courseid): bool {
-        unset($userid, $courseid); // No unit-course mapping yet; nothing to claim.
+        unset($userid); // Ownership is a property of the course, not the learner.
 
-        return false;
+        if (!self::is_enabled()) {
+            return false;
+        }
+
+        return unit_course_manager::course_is_owned($courseid);
     }
 
     /**

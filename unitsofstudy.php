@@ -37,6 +37,7 @@ require_once($CFG->libdir . '/adminlib.php');
 
 use local_educheckout_he\course_of_study_manager;
 use local_educheckout_he\unit_of_study_manager;
+use local_educheckout_he\unit_course_manager;
 use core\output\notification;
 
 admin_externalpage_setup('local_educheckout_he_unitsofstudy');
@@ -123,6 +124,10 @@ if (!$units) {
 $yes = get_string('yes');
 $no  = get_string('no');
 
+// Mapped-course counts for every listed unit, fetched in one grouped query
+// rather than one per row.
+$mapcounts = unit_course_manager::counts_by_unit(array_keys($units));
+
 $table = new html_table();
 $table->attributes['class'] = 'generaltable';
 $table->head = [
@@ -132,6 +137,7 @@ $table->head = [
     get_string('uos_col_eftsl', $component),
     get_string('uos_col_foecode', $component),
     get_string('uos_col_mode', $component),
+    get_string('uos_col_courses', $component),
     get_string('uos_col_enabled', $component),
     get_string('uos_col_actions', $component),
 ];
@@ -146,6 +152,10 @@ foreach ($units as $unit) {
         ? s($courses[$unit->courseofstudyid]->code)
         : '—';
 
+    // The mapped-course count links through to the mapping manager for the unit.
+    $coursesurl = new moodle_url('/local/educheckout_he/unit_courses.php', ['unitofstudyid' => $unit->id]);
+    $coursescount = html_writer::link($coursesurl, (string) ($mapcounts[$unit->id] ?? 0));
+
     $editurl = new moodle_url('/local/educheckout_he/unit_of_study_edit.php', ['id' => $unit->id]);
     $delurl  = new moodle_url($pageurl, ['delete' => $unit->id]);
     $actions = $OUTPUT->action_icon($editurl, new pix_icon('t/edit', get_string('edit')))
@@ -158,6 +168,7 @@ foreach ($units as $unit) {
         format_float($unit->eftsl, 5),
         $unit->foecode !== null && $unit->foecode !== '' ? s($unit->foecode) : '—',
         $mode,
+        $coursescount,
         $unit->enabled ? $yes : $no,
         $actions,
     ];

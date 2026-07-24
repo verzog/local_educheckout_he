@@ -55,6 +55,21 @@ Landed since (**§1 PR 1 — structural catalogue, shipped**):
 - **Tests** — phpunit coverage of both managers (normalisation, coercion,
   scoping, guards, kill-switch).
 
+Landed since (**§1 PR 2 — unit-course mapping + real `owns_enrolment()`, shipped**):
+
+- **Data model** — `local_educheckout_he_unitcourses` maps a unit of study to
+  the Moodle course(s) that deliver it (unique on `(unitofstudyid, courseid)`,
+  indexed on `courseid`), with `unit_course_manager` (idempotent map, unmap,
+  the `course_is_owned()` lookup) and a per-unit mapping admin page.
+- **Enrolment ownership** — `owns_enrolment()` is now a real single-indexed
+  lookup: true when the enrolled course maps to a unit of study whose unit and
+  parent course of study are both enabled, gated by the kill-switch. This is
+  what starts `pathway = 'he'` tagging in core's enrolment envelope (on a
+  licensed site) and makes `count_active_enrolments()` report real numbers.
+- **Privacy / tests** — the mapping table joins the provider (config; only
+  `usermodified` is personal data); phpunit covers the mapping manager and the
+  ownership decision (mapped/unmapped, disabled unit/course-of-study, switch).
+
 The lanes below are the substantial build-outs, listed roughly in dependency
 order. §1 gates most of the rest — the reporting lanes have nothing to report
 until the structure exists.
@@ -74,12 +89,15 @@ units), each mapped to one or more Moodle courses.
   configuration; only `usermodified` is personal data, anonymised on erasure),
   and phpunit tests. `owns_enrolment()` stays false: the catalogue exists but
   nothing links a unit to a Moodle course yet.
-- **PR 2 (next)** — the unit→Moodle-course mapping. A `unitcourses` join table
-  (unique on `(unitofstudyid, courseid)`, indexed on `courseid`), the mapping
-  UI, and a real `owns_enrolment()` — true when the enrolled course maps to an
-  enabled unit of study, a single indexed lookup gated by the kill-switch. This
-  is what turns a Moodle enrolment into a reportable HE enrolment and starts the
-  `pathway = 'he'` tagging in core's envelope.
+- **PR 2 (shipped)** — the unit→Moodle-course mapping. A `unitcourses` join
+  table (unique on `(unitofstudyid, courseid)`, indexed on `courseid`),
+  `unit_course_manager`, a per-unit mapping admin page (map a course via the
+  autocomplete selector, remove a mapping, count surfaced on the units list),
+  and a real `owns_enrolment()` — true when the enrolled course maps to a unit
+  of study whose unit and parent course of study are both enabled, a single
+  indexed lookup gated by the kill-switch. This is what turns a Moodle
+  enrolment into a reportable HE enrolment and starts the `pathway = 'he'`
+  tagging in core's envelope.
 
 - **Anchors:** `pathway_provider::owns_enrolment()` (PR 2 gives it a real
   single-indexed lookup); core's `local_educheckout_core_enrolments` envelope
