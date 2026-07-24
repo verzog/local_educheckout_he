@@ -170,6 +170,15 @@ class pathway_provider extends \local_educheckout_core\base_provider
             'local/educheckout_he:manage'
         ));
 
+        // Student elements — the learner's TCSI student data. Sensitive, so
+        // gated by its own dedicated capability.
+        $admin->add('educheckout_he', new \admin_externalpage(
+            'local_educheckout_he_students',
+            new \lang_string('students_manage', 'local_educheckout_he'),
+            new \moodle_url('/local/educheckout_he/students.php'),
+            'local/educheckout_he:managestudents'
+        ));
+
         // The settings page stays behind the site-config check (the operational
         // pages above are already capability-gated and register for everyone).
         // This mirrors $hassiteconfig, which settings.php cannot pass in through
@@ -188,6 +197,19 @@ class pathway_provider extends \local_educheckout_core\base_provider
                     'local_educheckout_he/he_enabled',
                     new \lang_string('setting_he_enabled', 'local_educheckout_he'),
                     new \lang_string('setting_he_enabled_desc', 'local_educheckout_he'),
+                    0
+                )
+            );
+
+            // Dedicated opt-in for collecting learners' higher education
+            // elements — sensitive personal data, off by default and independent
+            // of the pathway switch above. Both must be on for the student
+            // surface to open.
+            $settings->add(
+                new \admin_setting_configcheckbox(
+                    'local_educheckout_he/he_students_enabled',
+                    new \lang_string('setting_he_students_enabled', 'local_educheckout_he'),
+                    new \lang_string('setting_he_students_enabled_desc', 'local_educheckout_he'),
                     0
                 )
             );

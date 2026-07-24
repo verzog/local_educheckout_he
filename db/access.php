@@ -37,4 +37,17 @@ $capabilities = [
             'manager' => CAP_ALLOW,
         ],
     ],
+
+    // Manage learners' higher education elements (citizenship, USI, CHESSN,
+    // disability, prior education). This is sensitive (special-category)
+    // personal data, so it is a dedicated capability separate from :manage —
+    // it can be granted without granting catalogue administration, and vice
+    // versa. Manager-only by default, per least privilege.
+    'local/educheckout_he:managestudents' => [
+        'captype'      => 'write',
+        'contextlevel' => CONTEXT_SYSTEM,
+        'archetypes'   => [
+            'manager' => CAP_ALLOW,
+        ],
+    ],
 ];

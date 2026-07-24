@@ -114,5 +114,31 @@ function xmldb_local_educheckout_he_upgrade(int $oldversion): bool {
         upgrade_plugin_savepoint(true, 2026072302, 'local', 'educheckout_he');
     }
 
+    if ($oldversion < 2026072303) {
+        // Per-learner higher education elements TCSI reports on (citizenship,
+        // USI, CHESSN, disability, prior education). One row per learner;
+        // sensitive personal data.
+        $table = new xmldb_table('local_educheckout_he_students');
+        $table->add_field('id', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, XMLDB_SEQUENCE, null);
+        $table->add_field('userid', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, null);
+        $table->add_field('citizenship', XMLDB_TYPE_CHAR, '32', null, XMLDB_NOTNULL, null, 'notstated');
+        $table->add_field('usi', XMLDB_TYPE_CHAR, '16', null, null, null, null);
+        $table->add_field('chessn', XMLDB_TYPE_CHAR, '16', null, null, null, null);
+        $table->add_field('disability', XMLDB_TYPE_CHAR, '32', null, XMLDB_NOTNULL, null, 'notstated');
+        $table->add_field('prioreducation', XMLDB_TYPE_CHAR, '32', null, XMLDB_NOTNULL, null, 'notstated');
+        $table->add_field('timecreated', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, '0');
+        $table->add_field('timemodified', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, '0');
+        $table->add_field('usermodified', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, '0');
+        $table->add_key('primary', XMLDB_KEY_PRIMARY, ['id']);
+        $table->add_key('fk_userid', XMLDB_KEY_FOREIGN_UNIQUE, ['userid'], 'user', ['id']);
+        $table->add_key('fk_usermodified', XMLDB_KEY_FOREIGN, ['usermodified'], 'user', ['id']);
+        if (!$dbman->table_exists($table)) {
+            $dbman->create_table($table);
+        }
+
+        // EduCheckout Platform savepoint reached.
+        upgrade_plugin_savepoint(true, 2026072303, 'local', 'educheckout_he');
+    }
+
     return true;
 }
