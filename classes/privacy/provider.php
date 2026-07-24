@@ -30,16 +30,16 @@ use core_privacy\local\request\writer;
 /**
  * Privacy API provider for the higher education pathway.
  *
- * The pathway's structural catalogue — courses of study and units of study —
- * is institutional configuration, not learner data. The only personal data it
- * holds is the authoring reference (usermodified) recording which admin created
- * or last changed each record. That reference is exported for, and anonymised
- * on erasure of, that admin, mirroring the way core treats its shared-config
- * tables (fee structures, timetabling resources). All data is held at the
- * system context.
+ * The pathway's structural catalogue — courses of study, units of study, and
+ * the unit-course mapping — is institutional configuration, not learner data.
+ * The only personal data those tables hold is the authoring reference
+ * (usermodified), exported for and anonymised on erasure of that admin.
  *
- * When later lanes add learner-data tables (TCSI student and enrolment
- * elements are personal data), this provider gains those tables.
+ * The student higher-education-elements table IS learner data — and its
+ * disability element is special-category — so it is treated like core's welfare
+ * profile: the learner's own record is exported and, on erasure, deleted (not
+ * anonymised), while an admin's authorship (usermodified) of another learner's
+ * record is anonymised. All data is held at the system context.
  *
  * @package    local_educheckout_he
  * @copyright  2025 Vernon Spain (https://educheckout.com)
@@ -58,6 +58,9 @@ class provider implements
 
     /** The unit-course mapping table. */
     const TABLE_UNITCOURSES = 'local_educheckout_he_unitcourses';
+
+    /** The per-learner student higher-education-elements table. */
+    const TABLE_STUDENTS = 'local_educheckout_he_students';
 
     /**
      * Returns metadata describing the personal data stored by this plugin.
@@ -99,6 +102,24 @@ class provider implements
             'privacy:metadata:unitcourses'
         );
 
+        // A student record holds the learner's higher education elements —
+        // personal data (the disability element is special-category) — plus the
+        // authoring admin's usermodified reference.
+        $collection->add_database_table(
+            self::TABLE_STUDENTS,
+            [
+                'userid'         => 'privacy:metadata:students:userid',
+                'citizenship'    => 'privacy:metadata:students:citizenship',
+                'usi'            => 'privacy:metadata:students:usi',
+                'chessn'         => 'privacy:metadata:students:chessn',
+                'disability'     => 'privacy:metadata:students:disability',
+                'prioreducation' => 'privacy:metadata:students:prioreducation',
+                'timemodified'   => 'privacy:metadata:students:timemodified',
+                'usermodified'   => 'privacy:metadata:students:usermodified',
+            ],
+            'privacy:metadata:students'
+        );
+
         return $collection;
     }
 
@@ -106,7 +127,8 @@ class provider implements
      * Returns the contexts that contain personal data for the given user.
      *
      * All higher education pathway data lives in the system context. A user
-     * appears here only as the author (usermodified) of a catalogue record.
+     * appears here as the author (usermodified) of a catalogue record, or as
+     * the subject (userid) or author of a student higher-education record.
      *
      * @param  int         $userid The Moodle user ID.
      * @return contextlist         The list of contexts.
@@ -119,13 +141,17 @@ class provider implements
                  WHERE ctx.contextlevel = :contextlevel
                    AND (EXISTS (SELECT 1 FROM {" . self::TABLE_COURSES . "} cos WHERE cos.usermodified = :userid1)
                      OR EXISTS (SELECT 1 FROM {" . self::TABLE_UNITS . "} uos WHERE uos.usermodified = :userid2)
-                     OR EXISTS (SELECT 1 FROM {" . self::TABLE_UNITCOURSES . "} ucm WHERE ucm.usermodified = :userid3))";
+                     OR EXISTS (SELECT 1 FROM {" . self::TABLE_UNITCOURSES . "} ucm WHERE ucm.usermodified = :userid3)
+                     OR EXISTS (SELECT 1 FROM {" . self::TABLE_STUDENTS . "} stu WHERE stu.userid = :userid4)
+                     OR EXISTS (SELECT 1 FROM {" . self::TABLE_STUDENTS . "} stm WHERE stm.usermodified = :userid5))";
 
         $contextlist->add_from_sql($sql, [
             'contextlevel' => CONTEXT_SYSTEM,
             'userid1'      => $userid,
             'userid2'      => $userid,
             'userid3'      => $userid,
+            'userid4'      => $userid,
+            'userid5'      => $userid,
         ]);
 
         return $contextlist;
@@ -155,6 +181,14 @@ class provider implements
 
         // Admins who authored a unit-course mapping appear via usermodified too.
         $sql = "SELECT usermodified FROM {" . self::TABLE_UNITCOURSES . "} WHERE usermodified <> 0";
+        $userlist->add_from_sql('usermodified', $sql, []);
+
+        // Learners appear by userid on their own student record; the admin who
+        // created or last edited it appears via usermodified.
+        $sql = "SELECT userid FROM {" . self::TABLE_STUDENTS . "}";
+        $userlist->add_from_sql('userid', $sql, []);
+
+        $sql = "SELECT usermodified FROM {" . self::TABLE_STUDENTS . "} WHERE usermodified <> 0";
         $userlist->add_from_sql('usermodified', $sql, []);
     }
 
@@ -201,6 +235,38 @@ class provider implements
                     (object) ['records' => array_values($mappings)]
                 );
             }
+
+            // Export this learner's own higher education record.
+            $students = $DB->get_records(self::TABLE_STUDENTS, ['userid' => $userid]);
+            if ($students) {
+                writer::with_context($context)->export_data(
+                    [get_string('pluginname', 'local_educheckout_he'), 'Higher education elements'],
+                    (object) ['records' => array_values($students)]
+                );
+            }
+
+            // Export the audit trail for other learners' records this user
+            // edited (their own record is covered above via userid). Only the
+            // editor's own audit fields are exported: another learner's student
+            // elements are that learner's personal data, so an editor's export
+            // must not disclose them.
+            $edited = $DB->get_records_select(
+                self::TABLE_STUDENTS,
+                'usermodified = :usermodified AND userid <> :userid',
+                ['usermodified' => $userid, 'userid' => $userid]
+            );
+            if ($edited) {
+                $audit = array_map(static function ($record) {
+                    return (object) [
+                        'studentid'    => $record->id,
+                        'timemodified' => $record->timemodified,
+                    ];
+                }, array_values($edited));
+                writer::with_context($context)->export_data(
+                    [get_string('pluginname', 'local_educheckout_he'), 'Higher education records edited'],
+                    (object) ['records' => $audit]
+                );
+            }
         }
     }
 
@@ -223,6 +289,8 @@ class provider implements
         $DB->set_field_select(self::TABLE_COURSES, 'usermodified', 0, 'usermodified <> ?', [0]);
         $DB->set_field_select(self::TABLE_UNITS, 'usermodified', 0, 'usermodified <> ?', [0]);
         $DB->set_field_select(self::TABLE_UNITCOURSES, 'usermodified', 0, 'usermodified <> ?', [0]);
+        // Student records are learner data: delete them outright.
+        $DB->delete_records(self::TABLE_STUDENTS);
     }
 
     /**
@@ -245,6 +313,11 @@ class provider implements
             $DB->set_field(self::TABLE_COURSES, 'usermodified', 0, ['usermodified' => $userid]);
             $DB->set_field(self::TABLE_UNITS, 'usermodified', 0, ['usermodified' => $userid]);
             $DB->set_field(self::TABLE_UNITCOURSES, 'usermodified', 0, ['usermodified' => $userid]);
+
+            // This learner's own higher education record goes; their authorship
+            // of another learner's record is anonymised, not deleted.
+            $DB->delete_records(self::TABLE_STUDENTS, ['userid' => $userid]);
+            $DB->set_field(self::TABLE_STUDENTS, 'usermodified', 0, ['usermodified' => $userid]);
         }
     }
 
@@ -273,5 +346,10 @@ class provider implements
         $DB->set_field_select(self::TABLE_COURSES, 'usermodified', 0, "usermodified $insql", $inparams);
         $DB->set_field_select(self::TABLE_UNITS, 'usermodified', 0, "usermodified $insql", $inparams);
         $DB->set_field_select(self::TABLE_UNITCOURSES, 'usermodified', 0, "usermodified $insql", $inparams);
+
+        // These learners' own higher education records go; their authorship of
+        // another learner's record is anonymised, not deleted.
+        $DB->delete_records_select(self::TABLE_STUDENTS, "userid $insql", $inparams);
+        $DB->set_field_select(self::TABLE_STUDENTS, 'usermodified', 0, "usermodified $insql", $inparams);
     }
 }

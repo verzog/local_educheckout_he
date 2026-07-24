@@ -121,5 +121,44 @@
       </INDEXES>
     </TABLE>
 
+    <!--
+    =========================================================================
+    local_educheckout_he_students
+    =========================================================================
+    A learner's higher education elements TCSI reports on but Moodle does not
+    hold: citizenship/residency status, USI and CHESSN, disability, and highest
+    prior educational attainment. One row per learner (unique userid). This is
+    the learner's personal data — and the disability element is special-category
+    under the Australian Privacy Principles — so the whole subsystem is
+    capability-gated, off by default, and fully covered by the Privacy API. The
+    coded fields store internal codes mapped to TCSI code sets at export time.
+    -->
+    <TABLE NAME="local_educheckout_he_students" COMMENT="Per-learner higher education elements (TCSI student data). Sensitive personal data.">
+      <FIELDS>
+        <FIELD NAME="id"             TYPE="int"  LENGTH="10"  NOTNULL="true" SEQUENCE="true"/>
+        <FIELD NAME="userid"         TYPE="int"  LENGTH="10"  NOTNULL="true"
+                                     COMMENT="FK → mdl_user.id the higher education elements are about."/>
+        <FIELD NAME="citizenship"    TYPE="char" LENGTH="32"  NOTNULL="true" DEFAULT="notstated"
+                                     COMMENT="Citizenship / residency status code (internal code set)."/>
+        <FIELD NAME="usi"            TYPE="char" LENGTH="16"  NOTNULL="false"
+                                     COMMENT="Unique Student Identifier. NULL = not recorded."/>
+        <FIELD NAME="chessn"         TYPE="char" LENGTH="16"  NOTNULL="false"
+                                     COMMENT="Commonwealth Higher Education Student Support Number. NULL = not recorded."/>
+        <FIELD NAME="disability"     TYPE="char" LENGTH="32"  NOTNULL="true" DEFAULT="notstated"
+                                     COMMENT="Disability status code (internal code set). Special-category data."/>
+        <FIELD NAME="prioreducation" TYPE="char" LENGTH="32"  NOTNULL="true" DEFAULT="notstated"
+                                     COMMENT="Highest prior educational attainment code (internal code set)."/>
+        <FIELD NAME="timecreated"    TYPE="int"  LENGTH="10"  NOTNULL="true" DEFAULT="0"/>
+        <FIELD NAME="timemodified"   TYPE="int"  LENGTH="10"  NOTNULL="true" DEFAULT="0"/>
+        <FIELD NAME="usermodified"   TYPE="int"  LENGTH="10"  NOTNULL="true" DEFAULT="0"
+                                     COMMENT="FK → mdl_user.id who created or last changed the record."/>
+      </FIELDS>
+      <KEYS>
+        <KEY NAME="primary"         TYPE="primary" FIELDS="id"/>
+        <KEY NAME="fk_userid"       TYPE="foreign-unique" FIELDS="userid" REFTABLE="user" REFFIELDS="id" COMMENT="One higher education record per learner."/>
+        <KEY NAME="fk_usermodified" TYPE="foreign" FIELDS="usermodified" REFTABLE="user" REFFIELDS="id"/>
+      </KEYS>
+    </TABLE>
+
   </TABLES>
 </XMLDB>

@@ -116,13 +116,26 @@ residency status, USI and CHESSN, disability, prior educational attainment,
 term/permanent address, and the course-admission and unit-enrolment records that
 tie a student to §1's structure.
 
+- **PR 1 (shipped)** — the student HE elements core. A
+  `local_educheckout_he_students` table (one row per learner, unique userid)
+  holding citizenship/residency, USI, CHESSN, disability, and prior education,
+  with `student_manager` (upsert by userid, code coercion, USI/CHESSN
+  normalisation), an admin edit page with the AJAX learner picker, a dedicated
+  `managestudents` capability, and a `he_students_enabled` opt-in (off by
+  default, on top of the pathway switch — sensitive data never collected
+  implicitly). This is the pathway's **first learner-data table**: the Privacy
+  provider gained full sensitive-data handling — the learner's own record is
+  exported and, on erasure, deleted; an admin's authorship (usermodified) of
+  another learner's record is anonymised — mirroring core's §16 welfare lane.
+  Coded fields store internal codes mapped to TCSI code sets at export time.
+- **PR 2 (next)** — **term / permanent address** and the **course-admission +
+  unit-enrolment records** that tie a learner to §1's course-of-study and unit
+  structure (the join TCSI load/liability in §3 attaches to).
+
 - **Anchors:** §1's course/unit tables; core's user-identity layer
   (`local_educheckout_core_users`) as the extension pattern; the admin-page +
-  capability + kill-switch conventions.
-- **Privacy:** this is the lane that turns the null provider into a full one —
-  student HE elements are personal (and some, e.g. disability, are
-  special-category, so mirror core §16's sensitive-data handling: capability
-  gated, exported and erased by `userid`, authoring actor anonymised).
+  capability + kill-switch conventions; core's §16 welfare lane as the
+  sensitive-data privacy template.
 - **Notes:** validate every element against its TCSI code set at the boundary
   with the correct `PARAM_*` type; store codes, render labels from lang strings.
 
