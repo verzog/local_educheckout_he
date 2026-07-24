@@ -83,5 +83,36 @@ function xmldb_local_educheckout_he_upgrade(int $oldversion): bool {
         upgrade_plugin_savepoint(true, 2026072301, 'local', 'educheckout_he');
     }
 
+    if ($oldversion < 2026072302) {
+        // The unit→Moodle-course mapping that makes the pathway claim
+        // enrolments: owns_enrolment() returns true when the enrolled course
+        // maps to an enabled unit of study.
+        $table = new xmldb_table('local_educheckout_he_unitcourses');
+        $table->add_field('id', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, XMLDB_SEQUENCE, null);
+        $table->add_field('unitofstudyid', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, null);
+        $table->add_field('courseid', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, null);
+        $table->add_field('timecreated', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, '0');
+        $table->add_field('timemodified', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, '0');
+        $table->add_field('usermodified', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, '0');
+        $table->add_key('primary', XMLDB_KEY_PRIMARY, ['id']);
+        $table->add_key(
+            'fk_unitofstudy',
+            XMLDB_KEY_FOREIGN,
+            ['unitofstudyid'],
+            'local_educheckout_he_unitsofstudy',
+            ['id']
+        );
+        $table->add_key('fk_courseid', XMLDB_KEY_FOREIGN, ['courseid'], 'course', ['id']);
+        $table->add_key('fk_usermodified', XMLDB_KEY_FOREIGN, ['usermodified'], 'user', ['id']);
+        $table->add_index('uniq_unit_course', XMLDB_INDEX_UNIQUE, ['unitofstudyid', 'courseid']);
+        $table->add_index('idx_courseid', XMLDB_INDEX_NOTUNIQUE, ['courseid']);
+        if (!$dbman->table_exists($table)) {
+            $dbman->create_table($table);
+        }
+
+        // EduCheckout Platform savepoint reached.
+        upgrade_plugin_savepoint(true, 2026072302, 'local', 'educheckout_he');
+    }
+
     return true;
 }

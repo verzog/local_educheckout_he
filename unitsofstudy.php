@@ -37,6 +37,7 @@ require_once($CFG->libdir . '/adminlib.php');
 
 use local_educheckout_he\course_of_study_manager;
 use local_educheckout_he\unit_of_study_manager;
+use local_educheckout_he\unit_course_manager;
 use core\output\notification;
 
 admin_externalpage_setup('local_educheckout_he_unitsofstudy');
@@ -132,6 +133,7 @@ $table->head = [
     get_string('uos_col_eftsl', $component),
     get_string('uos_col_foecode', $component),
     get_string('uos_col_mode', $component),
+    get_string('uos_col_courses', $component),
     get_string('uos_col_enabled', $component),
     get_string('uos_col_actions', $component),
 ];
@@ -146,6 +148,10 @@ foreach ($units as $unit) {
         ? s($courses[$unit->courseofstudyid]->code)
         : '—';
 
+    // The mapped-course count links through to the mapping manager for the unit.
+    $coursesurl = new moodle_url('/local/educheckout_he/unit_courses.php', ['unitofstudyid' => $unit->id]);
+    $coursescount = html_writer::link($coursesurl, (string) unit_course_manager::count_for_unit($unit->id));
+
     $editurl = new moodle_url('/local/educheckout_he/unit_of_study_edit.php', ['id' => $unit->id]);
     $delurl  = new moodle_url($pageurl, ['delete' => $unit->id]);
     $actions = $OUTPUT->action_icon($editurl, new pix_icon('t/edit', get_string('edit')))
@@ -158,6 +164,7 @@ foreach ($units as $unit) {
         format_float($unit->eftsl, 5),
         $unit->foecode !== null && $unit->foecode !== '' ? s($unit->foecode) : '—',
         $mode,
+        $coursescount,
         $unit->enabled ? $yes : $no,
         $actions,
     ];
