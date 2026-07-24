@@ -37,12 +37,23 @@ In place today (**foundation — shipped**):
 - **Admin** — a "Higher education" sub-category under the platform's admin
   category, with a settings page carrying the `he_enabled` master kill-switch
   (off by default) and a `local/educheckout_he:manage` capability.
-- **Privacy** — the null provider: the foundation stores no personal data of its
-  own. It becomes a full provider when §2 adds learner-data tables.
 - **CI / packaging** — the platform CI matrix (PHP 8.2/8.3/8.4 × pgsql/mariadb/
   mysqli × Moodle 5.0/5.1/5.2), the proprietary-header `.phpcs.xml` ruleset, the
   proprietary licence and file headers, and the `local_educheckout_core`
   dependency pinned in `version.php`.
+
+Landed since (**§1 PR 1 — structural catalogue, shipped**):
+
+- **Data model** — `local_educheckout_he_coursesofstudy` (award courses: code,
+  name, CRICOS code, level of course) and `local_educheckout_he_unitsofstudy`
+  (units within a course: code, name, EFTSL load, field-of-education code,
+  delivery mode), with managers, admin CRUD, and the pathway kill-switch gating
+  every surface.
+- **Privacy** — now a full provider: both tables are institutional
+  configuration, so only the authoring reference (`usermodified`) is personal
+  data — exported for, and anonymised on erasure of, that admin.
+- **Tests** — phpunit coverage of both managers (normalisation, coercion,
+  scoping, guards, kill-switch).
 
 The lanes below are the substantial build-outs, listed roughly in dependency
 order. §1 gates most of the rest — the reporting lanes have nothing to report
@@ -55,17 +66,25 @@ enrolments. TCSI is organised around a **course of study** (an award course a
 student is admitted to) composed of **units of study** (the reportable teaching
 units), each mapped to one or more Moodle courses.
 
-- **Anchors:** `pathway_provider::owns_enrolment()` (currently returns false —
-  this lane gives it a real single-indexed lookup); core's
-  `local_educheckout_core_enrolments` envelope (the observer tags a claimed
-  enrolment `pathway = 'he'`); the resource/manager + admin-CRUD + kill-switch
-  conventions from every core lane.
-- **Data model:** `local_educheckout_he_coursesofstudy` (award course:
-  code, name, CRICOS where relevant, level of course) and
-  `local_educheckout_he_unitsofstudy` (unit code, EFTSL value, field-of-education
-  code, delivery mode), with a mapping from a unit of study to the Moodle
-  course(s) that deliver it. `owns_enrolment()` returns true when the enrolled
-  course maps to a unit of study.
+- **PR 1 (shipped)** — the structural catalogue. `coursesofstudy` and
+  `unitsofstudy` tables (the latter a child of the former), their managers,
+  admin CRUD (list / add / edit / delete, with a course-of-study filter on the
+  units list and a delete guard on a course that still has units), the pathway
+  kill-switch gating every surface, a full Privacy provider (both tables are
+  configuration; only `usermodified` is personal data, anonymised on erasure),
+  and phpunit tests. `owns_enrolment()` stays false: the catalogue exists but
+  nothing links a unit to a Moodle course yet.
+- **PR 2 (next)** — the unit→Moodle-course mapping. A `unitcourses` join table
+  (unique on `(unitofstudyid, courseid)`, indexed on `courseid`), the mapping
+  UI, and a real `owns_enrolment()` — true when the enrolled course maps to an
+  enabled unit of study, a single indexed lookup gated by the kill-switch. This
+  is what turns a Moodle enrolment into a reportable HE enrolment and starts the
+  `pathway = 'he'` tagging in core's envelope.
+
+- **Anchors:** `pathway_provider::owns_enrolment()` (PR 2 gives it a real
+  single-indexed lookup); core's `local_educheckout_core_enrolments` envelope
+  (the observer tags a claimed enrolment `pathway = 'he'`); the resource/manager
+  + admin-CRUD + kill-switch conventions from every core lane.
 - **Notes:** units of study and courses of study are institutional
   configuration, not learner data — only the authoring reference is per-user in
   the Privacy provider. The mapping is what turns a Moodle enrolment into a

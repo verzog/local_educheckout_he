@@ -23,8 +23,8 @@ defined('MOODLE_INTERNAL') || die();
 // The pathway nests its own sub-category and pages under core's top-level
 // 'educheckout_core' category (owned by local_educheckout_core/settings.php).
 // Registration lives in the provider so the same entry point can be reused by
-// core code, per the base_provider contract. The only page today is a settings
-// page, so registration sits behind the site-config guard.
-if ($hassiteconfig) {
-    \local_educheckout_he\pathway_provider::register_admin_pages($ADMIN);
-}
+// core code, per the base_provider contract. It is called unconditionally: the
+// category and the capability-gated operational pages must register for a
+// delegated manager without site config too, exactly as core does. The
+// provider keeps the settings page itself behind the site-config check.
+\local_educheckout_he\pathway_provider::register_admin_pages($ADMIN);
