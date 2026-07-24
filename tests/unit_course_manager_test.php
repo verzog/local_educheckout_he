@@ -147,4 +147,56 @@ final class unit_course_manager_test extends \advanced_testcase {
 
         $this->assertFalse(unit_course_manager::course_is_owned($this->courseid));
     }
+
+    /**
+     * counts_by_unit() returns per-unit counts in one query and omits empties.
+     *
+     * @return void
+     */
+    public function test_counts_by_unit(): void {
+        $emptyunit = unit_of_study_manager::save((object) [
+            'courseofstudyid' => $this->cosid,
+            'code'            => 'SCI102',
+            'name'            => 'Second',
+            'eftsl'           => '0.125',
+            'deliverymode'    => 'internal',
+        ]);
+        $other = (int) $this->getDataGenerator()->create_course()->id;
+        unit_course_manager::map($this->unitid, $this->courseid);
+        unit_course_manager::map($this->unitid, $other);
+
+        $counts = unit_course_manager::counts_by_unit([$this->unitid, $emptyunit]);
+        $this->assertSame(2, $counts[$this->unitid]);
+        // A unit with no mappings is absent (callers treat that as zero).
+        $this->assertArrayNotHasKey($emptyunit, $counts);
+        $this->assertSame([], unit_course_manager::counts_by_unit([]));
+    }
+
+    /**
+     * Deleting a unit of study removes its course mappings too.
+     *
+     * @return void
+     */
+    public function test_unit_deletion_cascades_mappings(): void {
+        unit_course_manager::map($this->unitid, $this->courseid);
+        $this->assertSame(1, unit_course_manager::count_for_unit($this->unitid));
+
+        unit_of_study_manager::delete($this->unitid);
+
+        $this->assertSame(0, unit_course_manager::count_for_unit($this->unitid));
+    }
+
+    /**
+     * Deleting a Moodle course clears its mappings through the observer.
+     *
+     * @return void
+     */
+    public function test_course_deletion_cleans_mappings(): void {
+        unit_course_manager::map($this->unitid, $this->courseid);
+        $this->assertTrue(unit_course_manager::is_mapped($this->unitid, $this->courseid));
+
+        delete_course($this->courseid, false);
+
+        $this->assertFalse(unit_course_manager::is_mapped($this->unitid, $this->courseid));
+    }
 }

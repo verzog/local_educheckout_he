@@ -194,7 +194,10 @@ class unit_of_study_manager {
     }
 
     /**
-     * Deletes a unit of study.
+     * Deletes a unit of study and its course mappings.
+     *
+     * The mappings are removed first, in the same transaction, so deleting a
+     * mapped unit never leaves orphan rows behind.
      *
      * @param  int  $id The unit of study id.
      * @return bool     True if a unit of study was removed.
@@ -202,6 +205,11 @@ class unit_of_study_manager {
     public static function delete(int $id): bool {
         global $DB;
 
-        return $DB->delete_records(self::TABLE, ['id' => $id]);
+        $transaction = $DB->start_delegated_transaction();
+        unit_course_manager::delete_for_unit($id);
+        $deleted = $DB->delete_records(self::TABLE, ['id' => $id]);
+        $transaction->allow_commit();
+
+        return $deleted;
     }
 }

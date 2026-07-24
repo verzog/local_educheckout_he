@@ -75,7 +75,18 @@ class unit_course_manager {
             'usermodified'  => (int) $USER->id,
         ];
 
-        return (int) $DB->insert_record(self::TABLE, $record);
+        try {
+            return (int) $DB->insert_record(self::TABLE, $record);
+        } catch (\dml_exception $e) {
+            // A concurrent request (or a double-submit) may have inserted the
+            // same pair between the check above and here, tripping the unique
+            // index. Re-read and return the winner so map() stays idempotent.
+            $existingid = $DB->get_field(self::TABLE, 'id', $conditions, IGNORE_MISSING);
+            if ($existingid) {
+                return (int) $existingid;
+            }
+            throw $e;
+        }
     }
 
     /**
@@ -132,6 +143,36 @@ class unit_course_manager {
     }
 
     /**
+     * Returns mapped-course counts for many units in a single query.
+     *
+     * Keeps a listing that shows a per-unit count off the one-query-per-row
+     * path. Units with no mappings are absent from the result (treat as 0).
+     *
+     * @param  int[] $unitids The unit of study ids.
+     * @return array          Map of unit of study id → mapped-course count.
+     */
+    public static function counts_by_unit(array $unitids): array {
+        global $DB;
+
+        if (empty($unitids)) {
+            return [];
+        }
+
+        [$insql, $inparams] = $DB->get_in_or_equal($unitids, SQL_PARAMS_NAMED);
+        $sql = "SELECT unitofstudyid, COUNT(*) AS cnt
+                  FROM {" . self::TABLE . "}
+                 WHERE unitofstudyid $insql
+              GROUP BY unitofstudyid";
+
+        $counts = [];
+        foreach ($DB->get_records_sql($sql, $inparams) as $row) {
+            $counts[(int) $row->unitofstudyid] = (int) $row->cnt;
+        }
+
+        return $counts;
+    }
+
+    /**
      * Deletes a mapping.
      *
      * @param  int  $id The mapping id.
@@ -141,6 +182,35 @@ class unit_course_manager {
         global $DB;
 
         return $DB->delete_records(self::TABLE, ['id' => $id]);
+    }
+
+    /**
+     * Deletes every mapping belonging to a unit of study.
+     *
+     * Called when the unit is deleted so no orphan mappings are left behind.
+     *
+     * @param  int $unitofstudyid The unit of study id.
+     * @return void
+     */
+    public static function delete_for_unit(int $unitofstudyid): void {
+        global $DB;
+
+        $DB->delete_records(self::TABLE, ['unitofstudyid' => $unitofstudyid]);
+    }
+
+    /**
+     * Deletes every mapping that references a Moodle course.
+     *
+     * Called from the course_deleted observer so a removed course does not
+     * leave orphan mappings behind.
+     *
+     * @param  int $courseid The Moodle course id.
+     * @return void
+     */
+    public static function delete_for_course(int $courseid): void {
+        global $DB;
+
+        $DB->delete_records(self::TABLE, ['courseid' => $courseid]);
     }
 
     /**
